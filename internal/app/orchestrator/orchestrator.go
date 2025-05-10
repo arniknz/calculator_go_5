@@ -1,16 +1,17 @@
 package application
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/arniknz/calculator_go_5/pkg/calculator"
+	"github.com/jmoiron/sqlx"
 )
 
 type Config struct {
@@ -22,26 +23,11 @@ type Config struct {
 }
 
 func Configure() *Config {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	a, _ := strconv.Atoi(os.Getenv("TIME_ADDITION_MS"))
-	if a == 0 {
-		a = 20
-	}
-	s, _ := strconv.Atoi(os.Getenv("TIME_SUBTRACTION_MS"))
-	if s == 0 {
-		s = 20
-	}
-	m, _ := strconv.Atoi(os.Getenv("TIME_MULTIPLICATIONS_MS"))
-	if m == 0 {
-		m = 70
-	}
-	d, _ := strconv.Atoi(os.Getenv("TIME_DIVISIONS_MS"))
-	if d == 0 {
-		d = 70
-	}
+	port := "8080"
+	a := 20
+	s := 20
+	m := 70
+	d := 70
 	return &Config{
 		Port:                port,
 		TimeAddition:        a,
@@ -57,7 +43,7 @@ type Orchestrator struct {
 	taskStore map[string]*Task
 	taskQueue []*Task
 	m         sync.Mutex
-	exprCnt   int64
+	database  *sqlx.DB
 	taskCnt   int64
 }
 
@@ -67,6 +53,7 @@ func NewOrchestrator() *Orchestrator {
 		exprStore: make(map[string]*Expression),
 		taskStore: make(map[string]*Task),
 		taskQueue: make([]*Task, 0),
+		database:  NewDB(),
 	}
 }
 
@@ -88,6 +75,59 @@ type Task struct {
 	Node          *ASTNode `json:"-"`
 }
 
+func updateStatusAndResult(db *sql.DB, exprID int, status string, result float64) error {
+	_, err := db.Exec("UPDATE expressions SET status=?, result=? WHERE id=?", status, result, exprID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *Orchestrator) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Login, Password string }
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "error: Bad request", http.StatusBadRequest)
+		return
+	}
+	hash, err := HashPassword(request.Password)
+	if err != nil {
+		http.Error(w, "error: Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := o.database.Exec("INSERT INTO users(login,password) VALUES(?,?)", request.Login, hash); err != nil {
+		http.Error(w, "error: User exists", http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (o *Orchestrator) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Login, Password string }
+
+	json.NewDecoder(r.Body).Decode(&request)
+	var id int
+	var hash string
+	err := o.database.Get(&hash, "SELECT password FROM users WHERE login=?", request.Login)
+	if err != nil {
+		http.Error(w, "error: Invalid creds", http.StatusUnauthorized)
+		return
+	}
+	err = CheckPassword(hash, request.Password)
+	if err != nil {
+		http.Error(w, "error: Invalid creds", http.StatusUnauthorized)
+		return
+	}
+
+	o.database.Get(&id, "SELECT id FROM users WHERE login=?", request.Login)
+	token, err := CreateToken(id)
+	if err != nil {
+		http.Error(w, "error: Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
 func (o *Orchestrator) CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, calculator.ErrMethodNotAllowed.Error(), http.StatusMethodNotAllowed)
@@ -106,22 +146,29 @@ func (o *Orchestrator) CalculateHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, fmt.Sprintf(`{"error" : "%s"}`, err.Error()), http.StatusUnprocessableEntity)
 		return
 	}
+	user_id := r.Context().Value(user_id_key{}).(int)
 	o.m.Lock()
-	o.exprCnt += 1
-	exprID := fmt.Sprintf("%d", o.exprCnt)
 	expr := &Expression{
-		ID:     exprID,
 		Expr:   req.Expression,
 		Status: "pending",
 		AST:    ast,
 	}
-	o.exprStore[exprID] = expr
+	inserted, err := o.database.Exec("INSERT INTO expressions(user_id,expression,status) VALUES(?,?,?)", user_id, expr.Expr, expr.Status)
+	if err != nil {
+		log.Fatal(err)
+	}
+	exprID, err := inserted.LastInsertId()
+	if err != nil {
+		log.Fatal(err)
+	}
+	expr.ID = strconv.Itoa(int(exprID))
+	o.exprStore[expr.ID] = expr
 	o.scheduleTasks(expr)
 	o.m.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"id": exprID})
+	json.NewEncoder(w).Encode(map[string]string{"id": expr.ID})
 }
 
 func (o *Orchestrator) expressionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -131,16 +178,33 @@ func (o *Orchestrator) expressionsHandler(w http.ResponseWriter, r *http.Request
 	}
 	o.m.Lock()
 	defer o.m.Unlock()
-	exprs := make([]*Expression, 0, len(o.exprStore))
 	for _, expr := range o.exprStore {
 		if expr.AST != nil && expr.AST.IsLeaf {
 			expr.Status = "completed"
 			expr.Result = &expr.AST.Value
+			expr_id, err := strconv.Atoi(expr.ID)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = updateStatusAndResult(o.database.DB, expr_id, expr.Status, float64(*expr.Result))
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
-		exprs = append(exprs, expr)
+	}
+	user_id := r.Context().Value(user_id_key{}).(int)
+	var exprs_struct []struct {
+		ID     int      `db:"id" json:"id"`
+		Expr   string   `db:"expression" json:"expression"`
+		Status string   `db:"status" json:"status"`
+		Result *float64 `db:"result" json:"result,omitempty"`
+	}
+	if err := o.database.Select(&exprs_struct, "SELECT id,expression,status,result FROM expressions WHERE user_id=?", user_id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"expressions": exprs})
+	json.NewEncoder(w).Encode(map[string]interface{}{"expressions": exprs_struct})
 }
 
 func (o *Orchestrator) expressionByIDHandler(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +213,10 @@ func (o *Orchestrator) expressionByIDHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	id := r.URL.Path[len("/api/v1/expressions/"):]
+	expr_id, err := strconv.Atoi(id)
+	if err != nil {
+		log.Fatal(err)
+	}
 	o.m.Lock()
 	expr, ok := o.exprStore[id]
 	o.m.Unlock()
@@ -156,12 +224,27 @@ func (o *Orchestrator) expressionByIDHandler(w http.ResponseWriter, r *http.Requ
 		http.Error(w, calculator.ErrExpressionNotFound.Error(), http.StatusNotFound)
 		return
 	}
+	user_id := r.Context().Value(user_id_key{}).(int)
 	if expr.AST != nil && expr.AST.IsLeaf {
 		expr.Status = "completed"
 		expr.Result = &expr.AST.Value
+		err = updateStatusAndResult(o.database.DB, expr_id, expr.Status, float64(*expr.Result))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	var exprs_struct struct {
+		ID     int      `db:"id" json:"id"`
+		Expr   string   `db:"expression" json:"expression"`
+		Status string   `db:"status" json:"status"`
+		Result *float64 `db:"result" json:"result,omitempty"`
+	}
+	if err := o.database.Get(&exprs_struct, "SELECT id,expression,status,result FROM expressions WHERE user_id=? AND id=?", user_id, expr_id); err != nil {
+		http.Error(w, calculator.ErrExpressionNotFound.Error(), http.StatusNotFound)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"expression": expr})
+	json.NewEncoder(w).Encode(map[string]interface{}{"expression": exprs_struct})
 }
 
 func (o *Orchestrator) getTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -266,9 +349,17 @@ func (o *Orchestrator) scheduleTasks(expr *Expression) {
 func (o *Orchestrator) StartServer() error {
 	m := http.NewServeMux()
 
-	m.HandleFunc("/api/v1/calculate", o.CalculateHandler)
-	m.HandleFunc("/api/v1/expressions", o.expressionsHandler)
-	m.HandleFunc("/api/v1/expressions/", o.expressionByIDHandler)
+	m.HandleFunc("/api/v1/register", o.RegisterHandler)
+	m.HandleFunc("/api/v1/login", o.LoginHandler)
+	m.HandleFunc("/api/v1/calculate", func(w http.ResponseWriter, r *http.Request) {
+		o.AuthMiddleware(http.HandlerFunc(o.CalculateHandler)).ServeHTTP(w, r)
+	})
+	m.HandleFunc("/api/v1/expressions", func(w http.ResponseWriter, r *http.Request) {
+		o.AuthMiddleware(http.HandlerFunc(o.expressionsHandler)).ServeHTTP(w, r)
+	})
+	m.HandleFunc("/api/v1/expressions/", func(w http.ResponseWriter, r *http.Request) {
+		o.AuthMiddleware(http.HandlerFunc(o.expressionByIDHandler)).ServeHTTP(w, r)
+	})
 	m.HandleFunc("/internal/task", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			o.getTaskHandler(w, r)

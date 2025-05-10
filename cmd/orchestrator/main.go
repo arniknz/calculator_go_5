@@ -8,7 +8,7 @@ import (
 
 func main() {
 	app := application.NewOrchestrator()
-	log.Println("Starting Orchestrator on port:", app.Config.Port)
+	log.Println("Starting Orchestrator on port:", 8080)
 	if err := app.StartServer(); err != nil {
 		log.Fatal(err)
 	}
