@@ -156,3 +156,9 @@ export DEBUG=true
 cd test/
 go test
 ```
+
+After the test, the **calculator_5_go.db** database will appear in the current folder; for the next test, you must delete this database **EXACTLY** in the current folder.
+
+Delete **test/calculator_5_go.db** after test
+
+Do not delete **calculator_go_5/calculator_5_go.db**, because you may lose all your data!
