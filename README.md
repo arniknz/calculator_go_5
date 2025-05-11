@@ -127,10 +127,10 @@ Status Codes:
 ### cURL:
 | METHOD | cURL request | Response | Status code |
 | ------ | ------------ | -------- | ----------- |
-| POST   |<code>curl --location 'http://localhost:8080/api/v1/calculate' --header 'Authorization: <your-mega-super-cool-jwt-token>' --header 'Content-Type: application/json' --data '{  "expression": "2+2*2"  }'</code>|<code>{"result": 6.000000}</code>| 200 |
-| POST   |<code>curl --location 'http://localhost:8080/api/v1/calculate' --header 'Authorization: <your-mega-super-cool-jwt-token>' --header 'Content-Type: application/json' --data '{  "expression": "2 + "  }'</code>|<code>{"error": "Invalid expression"}</code>| 422 |
-| GET    |<code>curl --request GET --url 'http://localhost:8080/api/v1/calculate' --header 'Authorization: <your-mega-super-cool-jwt-token>' --header 'Content-Type: application/json' --data '{  "expression": "2 + 1"  }'</code>|<code>{"error": "Only POST method is allowed"}</code>| 405 |
-| POST   |<code>curl --location 'http://localhost:8080/api/v1/calculate' --header 'Authorization: <your-mega-super-cool-jwt-token>' --header 'Content-Type: application/json' --data '{  "bebebe": "2 + 2"  }'</code>|<code>{"error": "Bad request"}</code>| 400 |
+| POST   |<code>curl --location 'http://localhost:8080/api/v1/calculate' --header 'Authorization: jwt-token' --header 'Content-Type: application/json' --data '{  "expression": "2+2*2"  }'</code>|<code>{"result": 6.000000}</code>| 200 |
+| POST   |<code>curl --location 'http://localhost:8080/api/v1/calculate' --header 'Authorization: jwt-token' --header 'Content-Type: application/json' --data '{  "expression": "2 + "  }'</code>|<code>{"error": "Invalid expression"}</code>| 422 |
+| GET    |<code>curl --request GET --url 'http://localhost:8080/api/v1/calculate' --header 'Authorization: jwt-token' --header 'Content-Type: application/json' --data '{  "expression": "2 + 1"  }'</code>|<code>{"error": "Only POST method is allowed"}</code>| 405 |
+| POST   |<code>curl --location 'http://localhost:8080/api/v1/calculate' --header 'Authorization: jwt-token' --header 'Content-Type: application/json' --data '{  "bebebe": "2 + 2"  }'</code>|<code>{"error": "Bad request"}</code>| 400 |
 
 ### Internal Server Error: 500 status code
 If an internal server error occurs, the service will return an error with status code 500
