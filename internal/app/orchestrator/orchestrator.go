@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -23,11 +24,26 @@ type Config struct {
 }
 
 func Configure() *Config {
-	port := "8080"
-	a := 20
-	s := 20
-	m := 70
-	d := 70
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	a, _ := strconv.Atoi(os.Getenv("TIME_ADDITION_MS"))
+	if a == 0 {
+		a = 20
+	}
+	s, _ := strconv.Atoi(os.Getenv("TIME_SUBTRACTION_MS"))
+	if s == 0 {
+		s = 20
+	}
+	m, _ := strconv.Atoi(os.Getenv("TIME_MULTIPLICATIONS_MS"))
+	if m == 0 {
+		m = 70
+	}
+	d, _ := strconv.Atoi(os.Getenv("TIME_DIVISIONS_MS"))
+	if d == 0 {
+		d = 70
+	}
 	return &Config{
 		Port:                port,
 		TimeAddition:        a,

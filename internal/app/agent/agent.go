@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/arniknz/calculator_go_5/pkg/calculator"
@@ -17,8 +19,14 @@ type Agent struct {
 }
 
 func NewAgent() *Agent {
-	cp := 5
-	OrchestratorPort := "http://127.0.0.1:8080"
+	cp, err := strconv.Atoi(os.Getenv("COMPUTING_POWER"))
+	if err != nil || cp < 1 {
+		cp = 1
+	}
+	OrchestratorPort := os.Getenv("ORCHESTRATOR_PORT")
+	if OrchestratorPort == "" {
+		OrchestratorPort = "http://127.0.0.1:8080"
+	}
 	return &Agent{
 		ComputingPower:   cp,
 		OrchestratorPort: OrchestratorPort,
