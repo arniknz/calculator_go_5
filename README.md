@@ -112,12 +112,14 @@ Status Codes:
 ```
 
 # Console export variables
+#### DEBUG for testing!
 ```
-  export TIME_ADDITION_MS=50
-  export TIME_SUBTRACTION_MS=50
-  export TIME_MULTIPLICATIONS_MS=100
-  export TIME_DIVISIONS_MS=100
-  export COMPUTING_POWER=4
+    export TIME_ADDITION_MS=50
+    export TIME_SUBTRACTION_MS=50
+    export TIME_MULTIPLICATIONS_MS=100
+    export TIME_DIVISIONS_MS=100
+    export COMPUTING_POWER=4
+    export DEBUG=false
 ```
 
 
@@ -143,6 +145,13 @@ If an internal server error occurs, the service will return an error with status
 | POST   | <code>{  "bebebe": "2 + 2"  }</code>|<code>{"error": "Bad request"}</code>| 400 |
 
 ## Testing
+
+### WARNING: TEST ONLY IN DEBUG MODE!
+
+```
+export DEBUG=true
+```
+
 ```
 cd test/
 go test

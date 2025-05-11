@@ -21,6 +21,7 @@ type Config struct {
 	TimeSubtraction     int
 	TimeMultiplications int
 	TimeDivisions       int
+	Debug               bool
 }
 
 func Configure() *Config {
@@ -44,12 +45,19 @@ func Configure() *Config {
 	if d == 0 {
 		d = 70
 	}
+	debug := false
+	debugStr := os.Getenv("DEBUG")
+	if debugStr != "" {
+		debug, _ = strconv.ParseBool(debugStr)
+	}
+
 	return &Config{
 		Port:                port,
 		TimeAddition:        a,
 		TimeSubtraction:     s,
 		TimeMultiplications: m,
 		TimeDivisions:       d,
+		Debug:               debug,
 	}
 }
 
@@ -162,7 +170,12 @@ func (o *Orchestrator) CalculateHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, fmt.Sprintf(`{"error" : "%s"}`, err.Error()), http.StatusUnprocessableEntity)
 		return
 	}
-	user_id := r.Context().Value(user_id_key{}).(int)
+	user_id := 0
+	if o.Config.Debug {
+		user_id = 1
+	} else {
+		user_id = r.Context().Value(user_id_key{}).(int)
+	}
 	o.m.Lock()
 	expr := &Expression{
 		Expr:   req.Expression,
@@ -208,7 +221,12 @@ func (o *Orchestrator) expressionsHandler(w http.ResponseWriter, r *http.Request
 			}
 		}
 	}
-	user_id := r.Context().Value(user_id_key{}).(int)
+	user_id := 0
+	if o.Config.Debug {
+		user_id = 1
+	} else {
+		user_id = r.Context().Value(user_id_key{}).(int)
+	}
 	var exprs_struct []struct {
 		ID     int      `db:"id" json:"id"`
 		Expr   string   `db:"expression" json:"expression"`
@@ -240,7 +258,12 @@ func (o *Orchestrator) expressionByIDHandler(w http.ResponseWriter, r *http.Requ
 		http.Error(w, calculator.ErrExpressionNotFound.Error(), http.StatusNotFound)
 		return
 	}
-	user_id := r.Context().Value(user_id_key{}).(int)
+	user_id := 0
+	if o.Config.Debug {
+		user_id = 1
+	} else {
+		user_id = r.Context().Value(user_id_key{}).(int)
+	}
 	if expr.AST != nil && expr.AST.IsLeaf {
 		expr.Status = "completed"
 		expr.Result = &expr.AST.Value
