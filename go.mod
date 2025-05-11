@@ -11,4 +11,4 @@ require (
 
 require github.com/golang-jwt/jwt/v5 v5.2.2
 
-require github.com/jmoiron/sqlx v1.4.0 // indirect
+require github.com/jmoiron/sqlx v1.4.0
