@@ -209,5 +209,5 @@ You should see output that states which versions of GCC, g++ and GDB you have in
 
 # TUTORIAL: How to install gcc on [Linux](https://askubuntu.com/questions/398489/how-to-install-build-essential)
 ```
-sudo apt install build build-essential
+sudo apt install build-essential
 ```
