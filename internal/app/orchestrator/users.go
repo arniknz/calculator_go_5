@@ -3,13 +3,14 @@ package application
 import (
 	"context"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtkey = []byte("mega-cool-super-jwt-key-that-no-one-should-know")
+var jwtkey = []byte(os.Getenv("JWT_KEY"))
 
 type Assert struct {
 	UserID int `json:"user_id"`

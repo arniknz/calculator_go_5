@@ -114,6 +114,7 @@ Status Codes:
 # Console export variables
 #### DEBUG for testing!
 ```
+    export JWT_KEY=your_key
     export TIME_ADDITION_MS=50
     export TIME_SUBTRACTION_MS=50
     export TIME_MULTIPLICATIONS_MS=100
@@ -122,6 +123,11 @@ Status Codes:
     export DEBUG=false
 ```
 
+or just copy variables from **template.env** 
+
+```
+    cp template.env .env
+```
 
 # Example requests
 ### cURL:
