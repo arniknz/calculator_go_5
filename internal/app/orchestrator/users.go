@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -42,6 +43,10 @@ func (o *Orchestrator) AuthMiddleware(request http.Handler) http.Handler {
 		if tokenStr == "" {
 			http.Error(w, "error: missing token", http.StatusUnauthorized)
 			return
+		}
+		parts := strings.Split(tokenStr, " ")
+		if len(parts) > 1 && parts[0] == "Bearer" {
+			tokenStr = parts[1]
 		}
 
 		assert := &Assert{}
